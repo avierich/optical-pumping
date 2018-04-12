@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+canvas {
+    border:1px solid #d3d3d3;
+    background-color: #f1f1f1;
+}
+</style>
+</head>
+<body id = "game" onload="startGame()">
+    <canvas id='myCanvas' style='border:1px solid #000000' width="800" height="600" onload="startGame()"></canvas>
+<br>
+<div class="slidecontainer">
+    Magnetic Field
+  <input type="range" min="0" max="100" value="0" class="slider" id="horifield">
+</div>
+
+    <div class="slidecontainer">
+  Light Speed <input type="range" min="0" max="200" value="0" class="slider" id="lightspeed">
+</div>
+<script>
+
+var myObstacles = [];
+var myElectrons = [];
+var myScore;
+var photonCount = 0;
+var detectorPos = 700;
+var photonSpeed = 0;
+var photonPerTime = 0;
+var displayRate = 0;
+
+
+function startGame() {
+    myGameArea.start();
+    var numElec = 5;
+    for(var i =0; i<numElec; i++) {
+        myElectrons.push(new electron(myEnergyLevels.xpos+25+myEnergyLevels.levelWidth*i/numElec));
+        myElectrons[i].init()
+    }
+    myLamp.init();
+
+}
+
+var myGameArea = {
+    canvas : document.getElementById("myCanvas"),
+    start : function() {
+        this.canvas.width = 800;
+        this.canvas.height = 600;
+        this.context = this.canvas.getContext("2d");
+        //document.getElementById("game").insertBefore(this.canvas, document.getElementById("game").childNodes[0]);
+        this.frameNo = 0;
+        this.interval = setInterval(updateGameArea, 20);
+        },
+    clear : function() {
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+}
+
+var myLamp = {
+    photon : 0,
+    target : 0,
+    targetIndex : -1,
+    visible : true,
+    init : function() {
+        var randIndex = Math.floor(Math.random()*myElectrons.length);
+        if (myEnergyLevels.horiField > 0 && (myElectrons[randIndex].l == 0 && myElectrons[randIndex].m<2) || myEnergyLevels.horiField == 0 && (myElectrons[randIndex].l == 0 )) {
+        this.target = myElectrons[randIndex].xpos;
+        this.targetIndex = randIndex;
+        } else {
+            this.target = detectorPos;
+            this.targetIndex = -1;
+            photonPerTime ++;
+        }
+        this.photon = 0;
+        this.visible = true;
+    },
+    update : function() {
+        ctx = myGameArea.context;
+        ctx.fillStyle = "black";
+
+        if (this.photon > this.target) {
+            if(this.targetIndex > -1) {
+                myElectrons[this.targetIndex].interact();
+                this.target = detectorPos;
+                this.targetIndex = -1;
+                this.visible = false;
+            } else {
+                photonCount ++;
+
+                //console.log(photonCount);
+            }
+
+            if (this.photon > detectorPos) {
+                this.init();
+            }
+
+        }
+        this.photon += photonSpeed;
+
+        if(this.visible) {
+            ctx.fillRect(this.photon, 300-5, 10, 10);
+        }
+    }
+}
+
+var myEnergyLevels = {
+    levelWidth : 300,
+    xpos : 200,
+    horiField : 0,
+    update : function() {
+        ctx = myGameArea.context;
+        ctx.fillStyle = "black";
+        for(var l = 0;l<2; l++) {
+            for(var f = 1; f<3; f++) {
+                for(var m = -1*f; m<f+1; m++) {
+                    //console.log("l "+l+"f "+f+" "+m);
+                    if (l==1) {
+                        //Draw the P
+                        ctx.fillStyle = "red";
+                        ctx.font="16px Arial";
+                        ctx.fillText("P", this.xpos - 20, Math.floor(0.5*(this.getEnergy(1,2,0)+this.getEnergy(1,1,0))));
+                    } else {
+                        ctx.fillStyle = "blue";
+                        ctx.font="16px Arial";
+                        ctx.fillText("S", this.xpos - 20, Math.floor(0.5*(this.getEnergy(0,2,0)+this.getEnergy(0,1,0))));
+
+                    }
+                    ctx.fillRect(this.xpos, this.getEnergy(l,f,m), this.levelWidth, 2);
+                    ctx.font="12px Arial";
+                    ctx.fillText("l = "+l+", f = "+f+", m = "+m, this.levelWidth+this.xpos+10, this.getEnergy(l,f,m));
+                }
+            }
+        }
+    },
+    getEnergy : function(l,f,m) {
+        return 600 -( l*240 + f*120 + m*this.horiField/4.0);
+    }
+}
+
+function electron(xpos) {
+    this.xpos = xpos;
+    this.l = 0;
+    this.f = 0;
+    this.m = 0;
+    this.init = function() {
+        this.f = 1 + Math.round(Math.random());
+        this.m = -1*this.f + Math.round(Math.random() * 2*this.f);
+    }
+    this.update = function() {
+        ctx = myGameArea.context;
+        ctx.fillStyle = "black";
+        // Draw the 'bounding box of the atom'
+        ctx.beginPath();
+        ctx.rect(this.xpos-5, myEnergyLevels.getEnergy(0,1,-1)+10, 20, myEnergyLevels.getEnergy(1,2,2)-myEnergyLevels.getEnergy(0,1,-1)-20);
+        ctx.stroke();
+        ctx.fillRect(this.xpos, myEnergyLevels.getEnergy(this.l,this.f,this.m)-5, 10, 10);
+        if(this.l == 1 && Math.random()>0.96){
+            this.decay();
+        }
+    }
+    this.interact = function(photonPos) {
+        this.l+=1;
+        if(myEnergyLevels.horiField > 0){
+        if(this.m == 1){ // Must go to F = 2 state
+            this.f = 2
+        } else { // otherwise it can go to either
+            if(Math.random()>0.5){
+                this.f = 1
+            } else {
+                this.f = 2
+            }
+        }
+        this.m+=1;
+        }
+    }
+    this.decay = function() {
+        this.init();
+        this.l=0;
+    }
+}
+
+
+function updateGameArea() {
+    myGameArea.clear();
+    myGameArea.frameNo += 1;
+
+    if((myGameArea.frameNo / 60) % 1 == 0){
+        displayRate = photonPerTime;
+        photonPerTime = 0;
+    }
+    console.log(photonPerTime);
+
+    for (i = 0; i < myElectrons.length; i += 1) {
+        myElectrons[i].update();
+    }
+
+
+    myEnergyLevels.update();
+    myLamp.update();
+
+    // Draw the apparatus
+
+    // Draw the Rb Cell
+    ctx.beginPath();
+    ctx.rect(170,40,450,500);
+    ctx.stroke();
+    ctx.font="12px Arial";
+    ctx.fillText("Rb Cell (Valance e-)", 506, 53);
+
+
+    // Draw vert coils
+    ctx.font="12px Arial";
+    ctx.fillText("RF Magnetic Field", 130 + 450/2-60, 28);
+    bezierCurve(130 , 10 , 450, 40);
+    bezierCurve(130 , 6 , 450, 40);
+    bezierCurve(130 , 2 , 450, 40);
+
+    bezierCurve(130 , 10+520 , 450, 40);
+    bezierCurve(130 , 6+520 , 450, 40);
+    bezierCurve(130 , 2+520 , 450, 40);
+
+    // Draw the horizontal coils
+    bezierCurve(130 , 40 , 40, 500);
+    bezierCurve(126 , 40 , 40, 500);
+    bezierCurve(122 , 40 , 40, 500);
+
+    bezierCurve(620 , 40 , 40, 500);
+    bezierCurve(624 , 40 , 40, 500);
+    bezierCurve(628 , 40 , 40, 500);
+    ctx.font="12px Arial";
+    ctx.fillText("Horizontal Magnetic Field", 630, 28);
+
+    // Draw the lamp
+    ctx.fillStyle = "black";
+    ctx.font="12px Arial";
+    ctx.fillText("Rb Lamp", 2, 300-20-20);
+    ctx.fillText("(Circularly Polarized)", 2, 300-20-4);
+    ctx.fillRect(0,300-20,80,40);
+
+    // Draw the detector
+    ctx.fillStyle = "black";
+    ctx.font="12px Arial";
+    ctx.fillText("Photo Detector", 675, 300-20-4);
+    ctx.fillRect(675,300-20,80,40);
+    ctx.font="12px Arial";
+    ctx.fillText("Counts / sec = "+displayRate, 675, 300-20-4+70);
+
+}
+
+function bezierCurve(x, y, width, height) {
+    centerX = x + Math.floor(width/2);
+    centerY = y + Math.floor(height/2);
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY - height / 2);
+
+    ctx.bezierCurveTo(
+        centerX + width / 2, centerY - height / 2,
+        centerX + width / 2, centerY + height / 2,
+        centerX, centerY + height / 2
+    );
+    ctx.bezierCurveTo(
+        centerX - width / 2, centerY + height / 2,
+        centerX - width / 2, centerY - height / 2,
+        centerX, centerY - height / 2
+    );
+
+    ctx.fillStyle = 'black';
+    ctx.stroke();
+    ctx.closePath();
+}
+
+function everyinterval(n) {
+    if ((myGameArea.frameNo / n) % 1 == 0) {return true;}
+    return false;
+}
+
+
+// scroll bar stuffs
+var elem = document.getElementById('horifield');
+var rangeValue = function(){
+  var newValue = elem.value;
+  var target = elem.querySelector('.value');
+  myEnergyLevels.horiField = newValue;
+  if (newValue == 50) {
+    for(var i =0; i<myElectrons.length; i++) {
+        myElectrons[i].init()
+    }
+  }
+}
+elem.addEventListener("input", rangeValue);
+
+var elem2 = document.getElementById('lightspeed');
+var rangeValue2 = function(){
+  var newValue = elem2.value;
+  var target = elem2.querySelector('.value');
+  photonSpeed = parseInt(newValue);
+}
+elem2.addEventListener("input", rangeValue2);
+</script>
+
+<br/><br/>
+The above is a basic demo of optical pumping in Rubidium
+</body>
+</html>
